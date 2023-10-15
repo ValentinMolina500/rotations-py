@@ -1,10 +1,16 @@
 import json
 import os
 from termcolor import colored, cprint
+import firebase_admin
+from firebase_admin import credentials
+from firebase_admin import db
 
-rotation_lists = []
+# Connect to Firebase DB
+print("Initialzing databse connection...")
+cred = credentials.Certificate("firebase_creds.json")
+firebase_admin.initialize_app(cred, {'databaseURL': 'https://rotations-py-default-rtdb.firebaseio.com/'})
 
-last_advanced_rotation_index = -1
+# Data structs
 class Rotation:
     name = ''
     priority = 1
@@ -54,6 +60,29 @@ class RotationsList:
         return {'name': self.name,
                 'rotations': [r.to_obj() for r in self.rotations],
                 'current_index': self.current_index}
+    
+def init_rotation_lists(data):
+    global rotation_lists
+
+    for rl in data:
+        deserialized_rots = [Rotation(x['name'], x['priority'], x['time_spent']) for x in rl['rotations']]
+        new_item = RotationsList(rl['name'], deserialized_rots)
+        new_item.set_index(rl['current_index'])
+        rotation_lists.append(new_item)
+
+# Read rotation lists from DB
+db_ref = db.reference("/example")
+
+lists_from_db = db_ref.get()
+rotation_lists = []
+
+if lists_from_db == None:
+    print('No database entry found! Starting from empty list')
+else:
+    init_rotation_lists(lists_from_db)
+
+last_advanced_rotation_index = -1
+
 
 
 def add_new_rotation_form():
@@ -127,17 +156,7 @@ def delete_rotation(rotation_index):
     print(f'Deleted rotation "{rotation.name}"\n')
     rotation_lists.pop(rotation_index - 1)
 
-# Write logic to load json file
-config_file = open('./lists.json')
-
-data = json.load(config_file)
-
-for rl in data:
-    deserialized_rots = [Rotation(x['name'], x['priority'], x['time_spent']) for x in rl['rotations']]
-    new_item = RotationsList(rl['name'], deserialized_rots)
-    new_item.set_index(rl['current_index'])
-    rotation_lists.append(new_item)
-
+# Main input loop
 while True:
     print('Select an option:')
     print('a) Add a new rotation')
@@ -162,8 +181,9 @@ while True:
         advance_rotation(rotation_index)
         pass
     if option == 'q':
+        print('Writing list to database...')
         f = open('lists.json', 'w')
-        f.write(json.dumps([rl.to_obj() for rl in rotation_lists]))
+        db_ref.set([rl.to_obj() for rl in rotation_lists])
         print('\nGoodbye!')
         break
     if option == 'd':
