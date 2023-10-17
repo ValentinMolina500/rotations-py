@@ -6,7 +6,7 @@ from firebase_admin import credentials
 from firebase_admin import db
 
 # Connect to Firebase DB
-print("Initialzing databse connection...")
+print("Initialzing database connection...")
 cred = credentials.Certificate("firebase_creds.json")
 firebase_admin.initialize_app(cred, {'databaseURL': 'https://rotations-py-default-rtdb.firebaseio.com/'})
 
@@ -60,6 +60,15 @@ class RotationsList:
         return {'name': self.name,
                 'rotations': [r.to_obj() for r in self.rotations],
                 'current_index': self.current_index}
+    
+    def add_item(self, name):
+        self.rotations.append(Rotation(name))
+
+    def remove_item(self, index):
+        self.rotations.pop(index)
+
+    def move_item(self, from_index, to_index):
+        self.rotations.insert(to_index, self.rotations.pop(from_index))
     
 def init_rotation_lists(data):
     global rotation_lists
@@ -156,6 +165,70 @@ def delete_rotation(rotation_index):
     print(f'Deleted rotation "{rotation.name}"\n')
     rotation_lists.pop(rotation_index - 1)
 
+def choose_rotation():
+    while True:
+        index_raw = input('Choose rotation: ')
+        index = int(index_raw) - 1
+        if index < 0 or index >= len(rotation_lists):
+            print('Invalid rotation! Try again.\n')
+        else:
+            return index
+
+def edit_rotation(rotation_index = None):
+    index = None
+    if rotation_index == None:
+        index = choose_rotation()
+    else:
+        index = rotation_index
+
+    print('Editing!')
+    rl = rotation_lists[index]
+   
+    while True:
+        print(colored(f'{rl.name}', attrs=["reverse"]))
+
+        j = 0
+        for rot in rl.rotations:
+            text = f'    {j + 1}. {rot.name}'
+            
+            if (j == rl.current_index):
+                print(colored(f'{text} (*)', "yellow"), end='')
+            else:
+                print(f'{text}', end='')
+            print()
+            j = j + 1
+
+        print()
+        print('a) Add an item to this rotation')
+        print('m) Move an item')
+        print('q) Quit editing')
+        print('r) Remove an item')
+
+        option_raw = input('\nEnter your option: ')
+        
+        cmd = option_raw[0]
+        
+        if cmd == 'a':
+            rot_item_name = input('Enter rotation item name: ')
+            rl.add_item(rot_item_name)
+            print('Added item!\n')
+        if cmd == 'r':
+            rotation_item_index_raw = input('Enter the item number: ')
+            rotation_item_index = int(rotation_item_index_raw) - 1
+            rl.remove_item(rotation_item_index)
+            print('Remove item!\n')
+        if cmd == 'm':
+            from_rotation_item_index_raw = input('Which item to move? ')
+            from_rotation_item_index = int(from_rotation_item_index_raw) - 1
+            to_rotation_item_index_raw = input('To where? ')
+            to_rotation_item_index = int(to_rotation_item_index_raw) - 1
+            rl.move_item(from_rotation_item_index, to_rotation_item_index)
+            print('Moved item!\n')
+        if cmd == 'q':
+            break
+
+    
+
 # Main input loop
 while True:
     print('Select an option:')
@@ -164,15 +237,16 @@ while True:
     print('q) Quit the app')
     print('n) Advance a rotation')
     print('d) Delete a rotation')
+    print('e) Edit a rotation')
 
     option_raw = input('\nEnter your option: ')
-
+    # Format "n1"
     option = option_raw[0]
     if option == 'a':
         add_new_rotation_form()
-    if option == 'v':
+    elif option == 'v':
         print_rotation_lists()
-    if option == 'n':
+    elif option == 'n':
         rotation_index = None
         if option_raw[1:] == '':
           rotation_index = -1
@@ -180,11 +254,18 @@ while True:
           rotation_index = int(option_raw[1:])
         advance_rotation(rotation_index)
         pass
-    if option == 'q':
+    elif option == 'q':
         print('Writing list to database...')
         f = open('lists.json', 'w')
         db_ref.set([rl.to_obj() for rl in rotation_lists])
         print('\nGoodbye!')
         break
-    if option == 'd':
+    elif option == 'd':
         delete_rotation(int(option_raw[1:]))
+    elif option == 'e':
+        rotation_index = None
+        if option_raw[1:] != '':
+            rotation_index = int(option_raw[1:]) - 1
+        edit_rotation(rotation_index)
+    else:
+        print('Invalid option!')
